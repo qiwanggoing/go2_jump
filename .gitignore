@@ -1,0 +1,25 @@
+# PyTorch models
+*.pt
+*.pth
+
+# Logs and training artifacts
+logs/
+wandb/
+events.out.tfevents.*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+env/
+venv/
+build/
+dist/
+*.egg-info/
+
+# System
+.DS_Store
+.idea/
+.vscode/
