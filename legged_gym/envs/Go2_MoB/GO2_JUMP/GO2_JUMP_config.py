@@ -152,8 +152,8 @@ class GO2_JUMP_Cfg_Yu( LeggedRobotCfg ):
             lin_vel_z = 0.05
             ang_vel_xy = 0.5#0.5平地的
             orientation = 2.0#1.0pd+t#0.1 1.0
-            torques = -0.0001
-            dof_vel = -0.
+            torques = -0.0002
+            dof_vel = -0.0001
             dof_acc = -5.5e-4
             base_height = 1.0 # 5.0 #1.0pd+torque#0.1 
             feet_air_time =  1.0

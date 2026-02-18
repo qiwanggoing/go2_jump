@@ -1087,19 +1087,33 @@ class GO2_JUMP_Robot(BaseTask):
         # print("!!!!!1",torch.exp(-joint_diff * 4).shape)
         return torch.exp(-joint_diff * 4) 
 
-    def _reward_feet_clearance(self):#跳跃这么写没问题
+    def _reward_feet_clearance(self):
         """
-        Calculates reward based on the clearance of the swing leg from the ground during movement.
-        Encourages appropriate lift of the feet during the swing phase of the gait.
+        动态调整的足部离地奖励：在 PD 衰减后期限制收腿奖励，防止无效高频收腿。
         """
-        # Compute feet contact mask
-        self.feet_height =self.rigid_state[:, self.feet_indices, 2] - 0.02
-        # Compute swing mask
+        # 1. 基础高度计算
+        self.feet_height = self.rigid_state[:, self.feet_indices, 2] - 0.02
         swing_mask = 1 - self._get_gait_phase()
-        # feet height should larger than target feet height at the peak
-        rew_pos = torch.clip(self.feet_height,min=0,max=0.05)
-        rew_pos = torch.sum(rew_pos * swing_mask[:,:1].repeat(1,4), dim=1)
-        return rew_pos*(torch.norm(self.commands[:, :2], dim=1) > 0.2)
+        
+        # 2. 获取进度 (0 -> 1)
+        progress = getattr(self, 'curriculum_factor', 0.0)
+        
+        # 3. 动态压缩奖励上限：随着进度增加，将 0.05m 的上限压缩至 0.01m
+        # 逻辑：后期即使你把腿缩到天上去，也只能拿到 0.01m 对应的奖励
+        max_cap = 0.05 * (1.0 - 0.8 * progress) 
+        rew_pos = torch.clip(self.feet_height, min=0, max=max_cap)
+        
+        # 4. 偏离 Default Pose 的软约束
+        # 计算当前 DOF 位置与默认位置的偏离程度
+        # 如果偏离过大（说明在疯狂收腿），奖励会迅速衰减
+        dof_deviation = torch.norm(self.dof_pos - self.default_dof_pos, dim=1)
+        deviation_scale = torch.exp(-torch.clip(dof_deviation - 1.0, min=0) * 5.0) # 偏离超过1.0弧度后开始惩罚
+
+        # 5. 聚合奖励
+        # 我们只给摆动相（swing）的腿高度奖励
+        rew_total = torch.sum(rew_pos * swing_mask[:, :1], dim=1) 
+        
+        return rew_total * deviation_scale * (torch.norm(self.commands[:, :2], dim=1) > 0.2)
 
     
     def _reward_lin_vel_z(self):
