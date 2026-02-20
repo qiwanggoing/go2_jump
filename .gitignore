@@ -13,7 +13,7 @@ __pycache__/
 *$py.class
 .pytest_cache/
 .venv/
-env/
+# env/
 venv/
 build/
 dist/
