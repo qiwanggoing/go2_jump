@@ -136,4 +136,17 @@ python deploy_mujoco/sim2sim_GO2_jump_position.py --load_model logs/go2_jump_pos
 | `R`       | 重置机器人姿态        | Reset robot to default pose |
 
 > Tips：同时按多个方向键可实现复合运动（如 W+A 前进+左平移）。速度指令会持续累加，直到按 `Space` 归零。
-```
+
+## 5. 项目进展与演化 (Project Progress & Evolution)
+
+### 5.1 解决“小腿不自然上抬”问题 (Solving "Unnatural Calf Tucking")
+在训练的纯力矩阶段，观察到机器人为了“作弊”获取 `feet_clearance` 奖励，学会了不自然地向上收缩（tuck）小腿，而不是通过驱动整个身体来跳跃。
+
+**解决方案**: 通过动态增强对小腿关节（calf joints）的姿态惩罚（`_reward_default_pos`），我们成功地抑制了这种行为。当PD辅助控制器衰减后，对小腿姿态偏离的惩罚会变得更重，从而迫使AI学习使用力矩来维持正确的腿部姿态。
+
+### 5.2 下一步：从“原地跳”到“按指令跳远” (Next Step: From "Hopping" to "Commanded Long Jump")
+**新目标**: 解决了基本姿态问题后，项目核心目标演进为实现一个更具挑战和实用价值的、可用于学术对标的跳跃任务。当前的“原地跳”行为基座高度变化不明显，不符合跳跃的真实意图。
+
+**实施方案**:
+1.  **任务模式重构**: 将从“持续跟踪速度并跳跃”的模式，重构为“接收一次性脉冲指令后执行一次跳远”的离散任务模式。
+2.  **奖励机制革新**: 设计一个全新的 `_reward_leap_distance` 奖励函数，该函数将直接奖励机器人在空中飞行的水平距离，从而激励AI学习跳得更远。
