@@ -1214,9 +1214,9 @@ class GO2_JUMP_Robot(BaseTask):
         calf_indices = [2, 5, 8, 11]
         
         # 3. 动态增强惩罚：随着 PD 衰减，对小腿姿态的约束力增强
-        # 从 1.0 倍逐渐增加到 3.0 倍
+        # 从 1.0 倍逐渐增加到 5.0 倍
         progress = getattr(self, 'curriculum_factor', 0.0)
-        calf_weight = 1.0 + progress * 2.0
+        calf_weight = 1.0 + progress * 4.0
         
         joint_diff[:, calf_indices] *= calf_weight
         
