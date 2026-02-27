@@ -111,31 +111,28 @@ python legged_gym/scripts/play.py --task go2_jump_pos --load_run <你的RunName>
 ### 4.2 运行 Mujoco 仿真对比测试
 
 #### A. 力矩控制模式（Torque Control）
-使用较低的 PD 参数（Kp=15.0, Kd=1.0），网络输出被解析为残差力矩（Action Scale=18.0），爆发力更强。
+对齐 Isaac Gym 训练环境，使用动态 Action Scale（Iter 4000 时为 23.5Nm），实现纯力矩部署。
 ```bash
-python deploy_mujoco/sim2sim_GO2_jump_torque.py --load_model logs/go2_jump/exported/policies/policy_1.pt
+python3 deploy_mujoco/sim2sim_GO2_jump_torque.py --load_model logs/go2_jump_torque/exported/policies/policy_1.pt
 ```
 
 #### B. 位置控制模式（Position Control）
 使用较高的 PD 参数（Kp=20.0, Kd=0.5），网络输出被解析为目标关节角（Action Scale=0.25），更加平滑稳定。
 ```bash
-python deploy_mujoco/sim2sim_GO2_jump_position.py --load_model logs/go2_jump_pos/exported/policies/policy_1.pt
+python3 deploy_mujoco/sim2sim_GO2_jump_position.py --load_model logs/go2_jump_pos/exported/policies/policy_1.pt
 ```
 
 ### 4.3 键盘控制说明（仿真窗口获得焦点后生效）
 
 | 按键      | 功能                  | 指令变化                  |
 |-----------|-----------------------|---------------------------|
-| `W`       | 前进 (Forward)        | x_vel_cmd += 0.5 m/s      |
-| `S`       | 后退 (Backward)       | x_vel_cmd -= 0.5 m/s      |
-| `A`       | 左平移 (Left)         | y_vel_cmd += 0.5 m/s      |
-| `D`       | 右平移 (Right)        | y_vel_cmd -= 0.5 m/s      |
-| `Q`       | 左转 (Turn Left)      | yaw_vel_cmd += 1.0 rad/s  |
-| `E`       | 右转 (Turn Right)     | yaw_vel_cmd -= 1.0 rad/s  |
-| `Space`   | 急停 (Emergency Stop) | 所有速度指令归零          |
-| `R`       | 重置机器人姿态        | Reset robot to default pose |
+| `W` / `S` | 前进 / 后退           | x_vel_cmd                 |
+| `A` / `D` | 左移 / 右移           | y_vel_cmd                 |
+| `Q` / `E` | 左转 / 右转           | yaw_vel_cmd               |
+| `J`       | **爆发跳跃 (Surge)**  | 触发 1.0m/s 瞬时前冲指令  |
+| `I` / `K` | 加速 / 减速           | 调整全局速度倍率          |
 
-> Tips：同时按多个方向键可实现复合运动（如 W+A 前进+左平移）。速度指令会持续累加，直到按 `Space` 归零。
+> Tips：力矩控制模式下，按下 `J` 键可观察到机器人在纯力矩驱动下的爆发跳跃表现。指令响应已调优，建议先按 `W` 让机器人进入运动状态后再尝试跳跃。
 
 ## 5. 项目进展与演化 (Project Progress & Evolution)
 
