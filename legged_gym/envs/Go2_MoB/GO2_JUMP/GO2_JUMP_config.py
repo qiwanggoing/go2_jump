@@ -40,8 +40,8 @@ class GO2_JUMP_Cfg_Yu( LeggedRobotCfg ):
         # trimesh only:
         slope_treshold = 0.75 # slopes above this threshold will be corrected to vertical surfaces
     class commands:
-        curriculum = False
-        max_curriculum = 2.0
+        curriculum = True
+        max_curriculum = 3.5
         num_commands = 4 # default: lin_vel_x, lin_vel_y, ang_vel_yaw, heading (in heading mode ang_vel_yaw is recomputed from heading error)
         resampling_time = 5. # time before command are changed[s]
         heading_command = False # if true: compute ang vel command from heading error
