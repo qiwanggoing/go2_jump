@@ -644,8 +644,8 @@ class GO2_JUMP_Robot(BaseTask):
         Args:
             env_ids (List[int]): ids of environments being reset
         """
-        # If the tracking reward is above 80% of the maximum, increase the range of commands
-        if torch.mean(self.episode_sums["tracking_lin_vel"][env_ids]) / self.max_episode_length > 0.8 * self.reward_scales["tracking_lin_vel"]:
+        # If the tracking reward is above 85% of the maximum, increase the range of commands
+        if torch.mean(self.episode_sums["tracking_lin_vel"][env_ids]) / self.max_episode_length > 0.85 * self.reward_scales["tracking_lin_vel"]:
             self.command_ranges["lin_vel_x"][0] = np.clip(self.command_ranges["lin_vel_x"][0] - 0.5, -self.cfg.commands.max_curriculum, 0.)
             self.command_ranges["lin_vel_x"][1] = np.clip(self.command_ranges["lin_vel_x"][1] + 0.5, 0., self.cfg.commands.max_curriculum)
     def _get_noise_scale_vec(self, cfg):
@@ -1068,6 +1068,7 @@ class GO2_JUMP_Robot(BaseTask):
         """
         Calculates a reward based on the number of feet contacts aligning with the gait phase. 
         Rewards or penalizes depending on whether the foot contact matches the expected gait phase.
+        Decays slightly as PD fades (up to 30%) to allow more natural dynamics while maintaining the gait.
         """
         contact = self.contact_forces[:, self.feet_indices, 2] > 5.
         stance_mask = self._get_gait_phase()
@@ -1075,8 +1076,11 @@ class GO2_JUMP_Robot(BaseTask):
             (contact[:,1] == contact[:,2]) & \
             (contact[:,2] == contact[:,3]) & \
             (contact[:,3] == stance_mask[:,0])
-        # print( JUMP.to(torch.float32).mean())
-        return JUMP*(torch.norm(self.commands[:, :2], dim=1) > 0.2)
+        
+        progress = getattr(self, 'curriculum_factor', 0.0)
+        decay = 1.0 - progress * 0.3 # 随着 PD 退出，微调相位强制性 (保留 70%)
+        
+        return JUMP * (torch.norm(self.commands[:, :2], dim=1) > 0.2) * decay
 
     def _reward_default_hip_pos(self):
         """
@@ -1089,15 +1093,17 @@ class GO2_JUMP_Robot(BaseTask):
 
     def _reward_feet_clearance(self):
         """
-        还原为简单的足部离地奖励：固定上限，无动态衰减。
+        足部离地奖励：随着 PD 退出而微量衰减，允许更自然的摆动。
         """
         self.feet_height = self.rigid_state[:, self.feet_indices, 2] - 0.02
         swing_mask = 1 - self._get_gait_phase()
         
-        # 使用固定 0.05m 的上限
         rew_pos = torch.clip(self.feet_height, min=0, max=0.05)
         
-        return torch.sum(rew_pos * swing_mask[:, :1], dim=1) * (torch.norm(self.commands[:, :2], dim=1) > 0.2)
+        progress = getattr(self, 'curriculum_factor', 0.0)
+        decay = 1.0 - progress * 0.3 # 微量减少高度强制性
+        
+        return torch.sum(rew_pos * swing_mask[:, :1], dim=1) * (torch.norm(self.commands[:, :2], dim=1) > 0.2) * decay
 
     
     def _reward_lin_vel_z(self):

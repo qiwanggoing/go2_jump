@@ -35,11 +35,17 @@ import statistics
 
 from torch.utils.tensorboard import SummaryWriter
 import torch
+import wandb
+import shutil
 
 from rsl_rl.algorithms import PPO
 from rsl_rl.modules import ActorCritic, ActorCriticRecurrent
 from rsl_rl.env import VecEnv
 
+def copy_code(src_path, dst_path):
+    if os.path.exists(dst_path):
+        shutil.rmtree(dst_path)
+    shutil.copytree(src_path, dst_path)
 
 class OnPolicyRunner:
 
@@ -84,6 +90,18 @@ class OnPolicyRunner:
         # initialize writer
         if self.log_dir is not None and self.writer is None:
             self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
+            wandb.require("core")
+            run_name = self.log_dir.split('/')[-1]
+            src_path = self.log_dir.split('logs')[0] + 'legged_gym'
+
+            self.wbd_writer = wandb.init(project=self.cfg['experiment_name'],
+                                         name=run_name,
+                                         config=self.cfg,
+                                         dir=self.log_dir,
+                                         save_code=False, )
+            dst_path = os.path.join(wandb.run.dir, 'legged_gym')
+            copy_code(src_path, dst_path)
+            print(f"Copying code from {src_path} to {dst_path}")
         if init_at_random_ep_len:
             self.env.episode_length_buf = torch.randint_like(self.env.episode_length_buf, high=int(self.env.max_episode_length))
         obs = self.env.get_observations()
@@ -160,6 +178,7 @@ class OnPolicyRunner:
                     infotensor = torch.cat((infotensor, ep_info[key].to(self.device)))
                 value = torch.mean(infotensor)
                 self.writer.add_scalar('Episode/' + key, value, locs['it'])
+                self.wbd_writer.log({'Episode/' + key: value}, step=locs['it'])
                 ep_string += f"""{f'Mean episode {key}:':>{pad}} {value:.4f}\n"""
         mean_std = self.alg.actor_critic.std.mean()
         fps = int(self.num_steps_per_env * self.env.num_envs / (locs['collection_time'] + locs['learn_time']))
@@ -171,11 +190,21 @@ class OnPolicyRunner:
         self.writer.add_scalar('Perf/total_fps', fps, locs['it'])
         self.writer.add_scalar('Perf/collection time', locs['collection_time'], locs['it'])
         self.writer.add_scalar('Perf/learning_time', locs['learn_time'], locs['it'])
+        self.wbd_writer.log({'Loss/value_function': locs['mean_value_loss'],
+                             'Loss/surrogate': locs['mean_surrogate_loss'],
+                             'Loss/learning_rate': self.alg.learning_rate,
+                             'Policy/mean_noise_std': mean_std.item(),
+                             'Perf/total_fps': fps,
+                             'Perf/collection time': locs['collection_time'],
+                             'Perf/learning_time': locs['learn_time']}, step=locs['it'])
         if len(locs['rewbuffer']) > 0:
             self.writer.add_scalar('Train/mean_reward', statistics.mean(locs['rewbuffer']), locs['it'])
             self.writer.add_scalar('Train/mean_episode_length', statistics.mean(locs['lenbuffer']), locs['it'])
             self.writer.add_scalar('Train/mean_reward/time', statistics.mean(locs['rewbuffer']), self.tot_time)
             self.writer.add_scalar('Train/mean_episode_length/time', statistics.mean(locs['lenbuffer']), self.tot_time)
+            self.wbd_writer.log({'Train/mean_reward': statistics.mean(locs['rewbuffer']),
+                                 'Train/mean_episode_length': statistics.mean(locs['lenbuffer'])},
+                                step=locs['it'])
 
         str = f" \033[1m Learning iteration {locs['it']}/{self.current_learning_iteration + locs['num_learning_iterations']} \033[0m "
 

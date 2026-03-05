@@ -147,11 +147,11 @@ class GO2_JUMP_Cfg_Yu( LeggedRobotCfg ):
     class rewards:
         class scales:
             termination = -10.0
-            tracking_lin_vel = 3.0
+            tracking_lin_vel = 4.0
             tracking_ang_vel = 2.0
             lin_vel_z = 0.05
-            ang_vel_xy = 0.5#0.5平地的
-            orientation = 2.0#1.0pd+t#0.1 1.0
+            ang_vel_xy = 0.2 # 对齐 Position 版本
+            orientation = 2.0 # 恢复权重，确保平衡的稳定性和性能
             torques = -0.0002
             dof_vel = -0.0001
             dof_acc = -5.5e-4
@@ -161,20 +161,20 @@ class GO2_JUMP_Cfg_Yu( LeggedRobotCfg ):
             feet_stumble = -0.0 
             action_rate = -0.05
             # stand_still = -2.
-            default_pos =-0.1####
+            default_pos =-0.3####
             default_hip_pos=0.3
             feet_contact_forces=-0.01
             jump=2.0
             feet_clearance=0.5
 
         only_positive_rewards = False # if true negative total rewards are clipped at zero (avoids early termination problems)
-        tracking_sigma = 0.25 # tracking reward = exp(-error^2/sigma)
+        tracking_sigma = 0.25 # 高精准度要求模式
         soft_dof_pos_limit = 0.9 # percentage of urdf limits, values above this limit are penalized
         soft_dof_vel_limit = 1.
         soft_torque_limit = 1.
         base_height_target = 0.3#0.25
         max_contact_force = 100. # forces above this value are penalized
-        cycle_time=1.5
+        cycle_time=1.0
         target_feet_height=0.05
     class normalization:
         class obs_scales:

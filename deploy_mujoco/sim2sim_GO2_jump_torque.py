@@ -12,20 +12,24 @@ from pynput import keyboard
 # === 全局控制变量 ===
 x_vel_cmd, y_vel_cmd, yaw_vel_cmd = 0.0, 0.0, 0.0
 x_vel_max, y_vel_max, yaw_vel_max = 1.5, 1.0, 3.0
-speed_multiplier = 1.0
+current_speed_target = 1.0 # 全局速度档位
 
 key_states = {'w': False, 's': False, 'a': False, 'd': False, 'q': False, 'e': False}
 surge_mode = False
 surge_start_time = 0.0
 
 def on_press(key):
-    global speed_multiplier, surge_mode, surge_start_time
+    global current_speed_target, surge_mode, surge_start_time
     try:
         if hasattr(key, 'char'):
             char = key.char.lower()
             if char in key_states: key_states[char] = True
-            elif char == 'i': speed_multiplier = min(speed_multiplier * 1.1, 5.0)
-            elif char == 'k': speed_multiplier = max(speed_multiplier * 0.9, 0.1)
+            elif char == 'i': 
+                current_speed_target = min(current_speed_target + 0.1, 5.0)
+                print(f"\n>>> Speed Target Increased: {current_speed_target:.1f} m/s <<<")
+            elif char == 'k': 
+                current_speed_target = max(current_speed_target - 0.1, 0.0)
+                print(f"\n>>> Speed Target Decreased: {current_speed_target:.1f} m/s <<<")
             elif char == 'j':
                 surge_mode = True
                 surge_start_time = 0
@@ -39,21 +43,44 @@ def on_release(key):
             if char in key_states: key_states[char] = False
     except AttributeError: pass
 
+def quaternion_to_euler_array(quat):
+    # Ensure quaternion is in the correct format [x, y, z, w]
+    x, y, z, w = quat
+    
+    # Roll (x-axis rotation)
+    t0 = +2.0 * (w * x + y * z)
+    t1 = +1.0 - 2.0 * (x * x + y * y)
+    roll_x = np.arctan2(t0, t1)
+    
+    # Pitch (y-axis rotation)
+    t2 = +2.0 * (w * y - z * x)
+    t2 = np.clip(t2, -1.0, 1.0)
+    pitch_y = np.arcsin(t2)
+    
+    # Yaw (z-axis rotation)
+    t3 = +2.0 * (w * z + x * y)
+    t4 = +1.0 - 2.0 * (y * y + z * z)
+    yaw_z = np.arctan2(t3, t4)
+    
+    # Returns roll, pitch, yaw in a NumPy array in radians
+    return np.array([roll_x, pitch_y, yaw_z])
+
 def get_obs(data, model):
-    '''提取符合 Isaac Gym 逻辑的观测'''
+    '''提取符合 Isaac Gym 逻辑的观测 - 完全对齐 Position 版'''
     q = data.qpos[7:19].astype(np.double)
     dq = data.qvel[6:].astype(np.double)
     
     # 四元数转换 [w, x, y, z] -> [x, y, z, w]
-    quat_scipy = data.qpos[3:7].astype(np.double)[[1, 2, 3, 0]] 
-    r = R.from_quat(quat_scipy)
+    q_raw = data.qpos[3:7].astype(np.double) # Mujoco 顺序是 [w, x, y, z]
+    quat_scipy = q_raw[[1, 2, 3, 0]] # SciPy 顺序是 [x, y, z, w]
     
-    # 1. 旋转角速度到本体坐标系 (Isaac Gym 核心对齐)
-    omega = r.apply(data.qvel[3:6], inverse=True).astype(np.double) 
+    # 1. 角速度直接读取 (Mujoco freejoint qvel[3:6] 已经是 body frame)
+    omega = data.qvel[3:6].astype(np.double) 
     
-    # 2. 转换欧拉角 [Roll, Pitch, Yaw] (修复 as_euler 报错)
-    eu_ang = r.as_euler('xyz', degrees=False).astype(np.double)
-    eu_ang = (eu_ang + np.pi) % (2 * np.pi) - np.pi
+    # 2. 使用 Position 版本的欧拉角转换函数
+    eu_ang = quaternion_to_euler_array(quat_scipy)
+    # 对齐训练时的 get_euler_xyz_tensor 处理逻辑
+    eu_ang[eu_ang > math.pi] -= 2 * math.pi
     
     base_pos = data.qpos[0:3].astype(np.double)
     return q, dq, quat_scipy, omega, eu_ang, base_pos
@@ -81,7 +108,7 @@ def run_mujoco(policy, cfg):
         hist_obs.append(np.zeros([1, cfg.env.num_single_obs], dtype=np.double))
     
     action = np.zeros(cfg.env.num_actions, dtype=np.double)
-    tau = np.zeros(cfg.env.num_actions, dtype=np.double)
+    last_tau = np.zeros(cfg.env.num_actions, dtype=np.double) # 记录上一时刻的实际力矩
 
     # === [关键对齐] Iter 4000 部署参数 ===
     progress = 1.0 
@@ -112,29 +139,38 @@ def run_mujoco(policy, cfg):
                 if current_sim_time - surge_start_time < 0.4: target_vx = 1.0
                 else: surge_mode, surge_start_time = False, 0
 
-            # 保持基本的平滑，对齐 Isaac Gym 表现
+            # 保持基本的平滑
             alpha = 0.05
-            x_vel_cmd = x_vel_cmd * (1 - alpha) + target_vx * x_vel_max * speed_multiplier * alpha
-            y_vel_cmd = y_vel_cmd * (1 - alpha) + target_vy * y_vel_max * speed_multiplier * alpha
-            yaw_vel_cmd = yaw_vel_cmd * (1 - alpha) + target_vyaw * yaw_vel_max * speed_multiplier * alpha
+            x_vel_cmd = x_vel_cmd * (1 - alpha) + target_vx * current_speed_target * alpha
+            y_vel_cmd = y_vel_cmd * (1 - alpha) + target_vy * current_speed_target * alpha
+            yaw_vel_cmd = yaw_vel_cmd * (1 - alpha) + target_vyaw * current_speed_target * alpha
             
             # 2. 策略推理 (50Hz)
             if count_lowlevel % cfg.sim_config.decimation == 0:
                 obs = np.zeros([1, cfg.env.num_single_obs], dtype=np.float32)
 
-                # 填充 60 维 Observation
-                obs[0, 0] = math.sin(2 * math.pi * count_lowlevel * cfg.sim_config.dt / cfg.rewards.cycle_time)
-                obs[0, 1] = math.cos(2 * math.pi * count_lowlevel * cfg.sim_config.dt / cfg.rewards.cycle_time)
+                # 填充 60 维 Observation (精确对齐 go2_jump_env.py)
+                phase = 2 * math.pi * count_lowlevel * cfg.sim_config.dt / cfg.rewards.cycle_time
+                obs[0, 0] = math.sin(phase)
+                obs[0, 1] = math.cos(phase)
                 obs[0, 2] = x_vel_cmd * cfg.normalization.obs_scales.lin_vel
                 obs[0, 3] = y_vel_cmd * cfg.normalization.obs_scales.lin_vel
                 obs[0, 4] = yaw_vel_cmd * cfg.normalization.obs_scales.ang_vel
+                
                 obs[0, 5:8] = omega * cfg.normalization.obs_scales.ang_vel
-                obs[0, 8:11] = eu_ang * cfg.normalization.obs_scales.quat
+                
+                # 关键修正：移除绝对 Yaw 角观测
+                # 训练好的模型不应依赖绝对方向，只需关注 Roll (Index 8) 和 Pitch (Index 9)
+                eu_ang_fixed = eu_ang.copy()
+                eu_ang_fixed[2] = 0.0 # 强制偏航角为 0
+                obs[0, 8:11] = eu_ang_fixed * cfg.normalization.obs_scales.quat
+                
                 obs[0, 11:23] = (q - cfg.robot_config.default_dof_pos) * cfg.normalization.obs_scales.dof_pos
                 obs[0, 23:35] = dq * cfg.normalization.obs_scales.dof_vel
-                obs[0, 35:47] = action 
-                obs[0, 47:59] = tau    
-                obs[0, 59] = progress
+                
+                obs[0, 35:47] = action   # Previous policy action
+                obs[0, 47:59] = last_tau # Previous total torque (Nm)
+                obs[0, 59]    = progress # PD Progress factor
 
                 obs = np.clip(obs, -cfg.normalization.clip_observations, cfg.normalization.clip_observations)
                 hist_obs.append(obs)
@@ -146,13 +182,15 @@ def run_mujoco(policy, cfg):
                 # 获取 Action
                 action[:] = policy(torch.tensor(policy_input))[0].detach().numpy()
                 action = np.clip(action, -cfg.normalization.clip_actions, cfg.normalization.clip_actions)
-            
-            # 3. 计算力矩 (200Hz)
+            # 3. 计算并施加力矩 (200Hz)
             residual_torque = action * current_action_scale
+            # 计算总力矩 (PD + Residual)
             tau = torque_control(residual_torque, q, cfg.robot_config.default_dof_pos, 
                                  cfg.robot_config.kps * pd_factor, dq, cfg.robot_config.kds * pd_factor)
             
             tau = np.clip(tau, -cfg.robot_config.tau_limit, cfg.robot_config.tau_limit)
+            last_tau[:] = tau # 更新力矩反馈，用于下一帧观测
+            
             data.ctrl = tau
             mujoco.mj_step(model, data)
             count_lowlevel += 1
