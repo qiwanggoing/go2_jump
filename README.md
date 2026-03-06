@@ -141,9 +141,26 @@ python3 deploy_mujoco/sim2sim_GO2_jump_position.py --load_model logs/go2_jump_po
 
 **解决方案**: 通过动态增强对小腿关节（calf joints）的姿态惩罚（`_reward_default_pos`），我们成功地抑制了这种行为。当PD辅助控制器衰减后，对小腿姿态偏离的惩罚会变得更重，从而迫使AI学习使用力矩来维持正确的腿部姿态。
 
-### 5.2 下一步：从“原地跳”到“按指令跳远” (Next Step: From "Hopping" to "Commanded Long Jump")
-**新目标**: 解决了基本姿态问题后，项目核心目标演进为实现一个更具挑战和实用价值的、可用于学术对标的跳跃任务。当前的“原地跳”行为基座高度变化不明显，不符合跳跃的真实意图。
+### 5.2 速度极限挑战与性能对标 (Velocity Challenge & Benchmarking)
 
-**实施方案**:
-1.  **任务模式重构**: 将从“持续跟踪速度并跳跃”的模式，重构为“接收一次性脉冲指令后执行一次跳远”的离散任务模式。
-2.  **奖励机制革新**: 设计一个全新的 `_reward_leap_distance` 奖励函数，该函数将直接奖励机器人在空中飞行的水平距离，从而激励AI学习跳得更远。
+**基准模型 (Current SOTA Model)**: `Mar05_07-28-45_/model_3500.pt`
+- **控制方式**: 纯力矩控制 (Residual Torque, PD Factor=0, Action Scale=23.5 Nm)
+- **环境精度表现**:
+    - **Isaac Gym (理想环境)**: 稳定跟踪 **4.0 m/s**。
+    - **Mujoco (Sim2Sim Final)**: 稳定跟踪 **2.5 m/s** (物理对齐版)。
+- **鲁棒性验证**: 成功通过了 **5.0 kg (超载 70%)** 额外负载及**崎岖地形 (--terrain)** 的压力测试。
+
+**快速启动命令 (Quick Start)**:
+```bash
+# 实时预览 (Isaac Gym)
+python legged_gym/scripts/play.py --task go2_jump --load_run Mar05_07-28-45_ --checkpoint 3500
+
+# 高保真部署验证 (Mujoco Sim2Sim)
+python deploy_mujoco/sim2sim_GO2_jump_torque_final.py --load_model logs/go2_jump_torque/exported/policies/policy_1.pt --load_mass 5.0 --terrain
+```
+
+### 5.3 核心技术突破 (Key Technical Milestones)
+
+1.  **动态相位释放 (Dynamic Phase Release)**: 引入随 PD 衰减进度自动释放的相位奖励，消除了传统硬性节拍导致的“空中弹腿”现象，使动作更符合自然动力学。
+2.  **Sim2Sim 精度修复**: 解决了 Mujoco 环境中由于角速度坐标系定义不一致导致的转向（Yaw轴）失稳问题，实现了 1.0s 周期下的全向平稳跳跃。
+3.  **姿态鲁棒性**: 通过动态增强对小腿（Calf）关节的约束，解决了 PD 退出后常见的“小腿收缩作弊”问题，确保了跳跃姿态的真实性。

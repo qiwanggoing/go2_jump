@@ -1,31 +1,27 @@
 import sys
-from legged_gym import LEGGED_GYM_ROOT_DIR
 import os
-import sys
-from legged_gym import LEGGED_GYM_ROOT_DIR
-
-import isaacgym
-from legged_gym.envs import *
-from legged_gym.utils import  get_args, export_policy_as_jit, task_registry, Logger
-
 import numpy as np
+import isaacgym
 import torch
+from legged_gym.envs import *
+from legged_gym.utils import get_args, export_policy_as_jit, task_registry, Logger
 
+# --- 配置开关 ---
+EXPORT_POLICY = True
+RECORD_FRAMES = False
+MOVE_CAMERA = True
+# ----------------
 
 def play(args):
     env_cfg, train_cfg = task_registry.get_cfgs(name=args.task)
-    # override some parameters for testing
-    env_cfg.env.num_envs = min(env_cfg.env.num_envs, 100)
+    
+    # 强制单机模式，聚焦观察
+    env_cfg.env.num_envs = 1
     env_cfg.terrain.num_rows = 5
     env_cfg.terrain.num_cols = 5
     env_cfg.terrain.curriculum = False
     env_cfg.noise.add_noise = False
-    # env_cfg.domain_rand.randomize_friction = False
-    # env_cfg.domain_rand.randomize_base_mass = False
-    # env_cfg.domain_rand.randomize_base_com = False
-    # env_cfg.domain_rand.randomize_pd_gains = False
-    # env_cfg.domain_rand.randomize_link_mass = False
-    env_cfg.commands.resampling_time=10000000.0
+    env_cfg.commands.resampling_time = 1e9 
     env_cfg.domain_rand.push_robots = False
     env_cfg.domain_rand.push_towards_goal = False
 
@@ -34,20 +30,15 @@ def play(args):
     # prepare environment
     env, _ = task_registry.make_env(name=args.task, args=args, env_cfg=env_cfg)
     
-    # [关键修复] 手动同步课程进度
+    # 同步 PD 衰减进度
     if args.checkpoint != -1:
         try:
-            # 尝试从 args.checkpoint 解析步数
-            # 假设 checkpoint 是数字，如 800
             iter_num = int(args.checkpoint)
-            # 每个 iter 有 24 步 (env.cfg.env.episode_length_s / dt ?) 
-            # 准确来说应该是 train_cfg.runner.num_steps_per_env (通常24)
-            # 硬编码或从配置读取
             steps_per_iter = train_cfg.runner.num_steps_per_env
             env.common_step_counter = iter_num * steps_per_iter
-            print(f"[Play] Syncing curriculum: Set common_step_counter to {env.common_step_counter} (Iter {iter_num})")
+            print(f"[Play] Syncing curriculum: Set common_step_counter to {env.common_step_counter}")
         except:
-            print("[Play] Warning: Could not parse checkpoint number to sync curriculum.")
+            print("[Play] Warning: Could not parse checkpoint.")
             
     obs = env.get_observations()
     # load policy
@@ -55,71 +46,42 @@ def play(args):
     ppo_runner, train_cfg = task_registry.make_alg_runner(env=env, name=args.task, args=args, train_cfg=train_cfg)
     policy = ppo_runner.get_inference_policy(device=env.device)
     
-    # export policy as a jit module (used to run it from C++)
+    # export policy
     if EXPORT_POLICY:
-        path = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', train_cfg.runner.experiment_name, 'exported', 'policies')
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'logs', train_cfg.runner.experiment_name, 'exported', 'policies')
         export_policy_as_jit(ppo_runner.alg.actor_critic, path)
         print('Exported policy as jit script to: ', path)
-    logger = Logger(env.dt)
-    robot_index = 0 # which robot is used for logging
-    joint_index = 2 # which joint is used for logging
-    stop_state_log = 400 # number of steps before plotting states
-    stop_rew_log = 800 # number of steps before print average episode rewards
-    camera_position = np.array(env_cfg.viewer.pos, dtype=np.float64)
-    camera_vel = np.array([1., 1., 0.])
-    camera_direction = np.array(env_cfg.viewer.lookat) - np.array(env_cfg.viewer.pos)
+    
+    robot_index = 0 
     img_idx = 0
-    env.commands[:, 0]=1.0
-    env.commands[:, 1]=0.
-    env.commands[:, 2]=0.
-    for i in range(10*int(env.max_episode_length)):
+    
+    # 设定目标对标速度
+    target_vel = 3.2
+    env.commands[:, 0] = target_vel
+    env.commands[:, 1] = 0.
+    env.commands[:, 2] = 0.
+    
+    print(f"\n[Play] Running at Target Velocity: {target_vel} m/s")
+
+    for i in range(10 * int(env.max_episode_length)):
+        env.commands[:, 0] = target_vel
+        
         actions = policy(obs.detach())
         obs, _, rews, dones, infos = env.step(actions.detach())
-        # print(obs[0])
-        # print(env.commands[0],env.landing_poses[0],env.was_in_flight[0],env.has_jumped[0])
-        if RECORD_FRAMES:
-                    if i % 2:
-                        filename = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', train_cfg.runner.experiment_name, 'exported', 'frames', f"{img_idx}.png")
-                        env.gym.write_viewer_image_to_file(env.viewer, filename)
-                        img_idx += 1 
-        if MOVE_CAMERA:
-            camera_position += camera_vel * env.dt
-            env.set_camera(camera_position, camera_position + camera_direction)
-
-        if i < stop_state_log:
-            logger.log_states(
-                {
-                    'dof_pos_target': actions[robot_index, joint_index].item() * env.cfg.control.action_scale,
-                    'dof_pos': env.dof_pos[robot_index, joint_index].item(),
-                    'dof_vel': env.dof_vel[robot_index, joint_index].item(),
-                    'dof_torque': env.torques[robot_index, joint_index].item(),
-                    'command_x': env.commands[robot_index, 0].item(),
-                    'command_y': env.commands[robot_index, 1].item(),
-                    'command_yaw': env.commands[robot_index, 2].item(),
-                    'base_vel_x': env.base_lin_vel[robot_index, 0].item(),
-                    'base_vel_y': env.base_lin_vel[robot_index, 1].item(),
-                    'base_vel_z': env.base_lin_vel[robot_index, 2].item(),
-                    'base_vel_yaw': env.base_ang_vel[robot_index, 2].item(),
-                    'contact_forces_z': env.contact_forces[robot_index, env.feet_indices, 2].cpu().numpy()
-                }
-            )
-        elif i==stop_state_log:
-            logger.plot_states()
-        if infos["episode"]:
-            num_episodes = torch.sum(env.reset_buf).item()
-            if num_episodes > 0:
-                logger.log_rewards(infos["episode"], num_episodes)
         
-        if i % stop_rew_log == 0:
-            if logger.num_episodes > 0:
-                logger.print_rewards()
-                logger.reset()
-            else:
-                print(f"Step {i}: No episodes finished yet (robots are too stable or episode length not reached). Keep running...")
+        # 视角跟随
+        if MOVE_CAMERA and not env.headless:
+            robot_pos = env.root_states[robot_index, :3].cpu().numpy()
+            cam_offset = np.array([-2.5, 1.5, 1.0])
+            camera_position = robot_pos + cam_offset
+            env.set_camera(camera_position, robot_pos)
+
+        # 每 100 步输出一次简报
+        if i % 100 == 0:
+            actual_vel = env.base_lin_vel[robot_index, 0].item()
+            max_torque = torch.max(torch.abs(env.torques[robot_index])).item()
+            print(f"Step {i:5d} | Cmd: {target_vel:.2f} | Actual: {actual_vel:.3f} | Max Torque: {max_torque:.2f} Nm")
 
 if __name__ == '__main__':
-    EXPORT_POLICY = True
-    RECORD_FRAMES = False
-    MOVE_CAMERA = False
     args = get_args()
     play(args)
