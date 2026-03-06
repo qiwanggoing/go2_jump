@@ -143,26 +143,30 @@ python3 deploy_mujoco/sim2sim_GO2_jump_position.py --load_model logs/go2_jump_po
 
 ### 5.2 速度极限挑战与性能对标 (Velocity Challenge & Benchmarking)
 
-**基准模型 (Current SOTA Model)**: `Mar05_07-28-45_/model_3500.pt`
+**核心基准模型 (Core Benchmark Model)**:
+- **Run Name**: `Mar05_07-28-45_` (训练日期: 2026-03-05)
+- **Checkpoint**: `model_3500.pt` (3500 代迭代模型)
 - **控制方式**: 纯力矩控制 (Residual Torque, PD Factor=0, Action Scale=23.5 Nm)
-- **环境精度表现**:
-    - **Isaac Gym (理想环境)**: 稳定跟踪 **4.0 m/s**。
-    - **Mujoco (Sim2Sim Final)**: 稳定跟踪 **2.5 m/s** (物理对齐版)。
-- **鲁棒性验证**: 成功通过了 **5.0 kg (超载 70%)** 额外负载及**崎岖地形 (--terrain)** 的压力测试。
 
-**快速启动命令 (Quick Start)**:
+**环境精度表现 (Steady-state Accuracy)**:
+- **Isaac Gym (理想环境)**: 稳定跟踪 **4.0 m/s** 极速。
+- **Mujoco (Sim2Sim Final)**: 稳定跟踪 **2.5 m/s** (高保真物理对齐版)。
+- **鲁棒性验证**: 成功通过了 **5.0 kg - 8.0 kg (超载 70%+)** 额外负载及**崎岖地形 (--terrain)** 的压力测试。
+
+**快速启动命令 (Quick Start Guide)**:
 ```bash
-# 实时预览 (Isaac Gym)
+# 1. 实时预览 (Isaac Gym) - 加载 3月5日 3500代模型
 python legged_gym/scripts/play.py --task go2_jump --load_run Mar05_07-28-45_ --checkpoint 3500
 
-# 高保真部署验证 (Mujoco Sim2Sim - 力矩版本项目)
+# 2. 高保真部署验证 (Mujoco Sim2Sim - 力矩版本项目)
+# 注意：加载 exported 下的 policy_1.pt (由上述 play 命令导出)
 python deploy_mujoco/sim2sim_GO2_jump_torque_final.py --load_model logs/go2_jump_torque/exported/policies/policy_1.pt --load_mass 5.0 --terrain
 ```
 
 **基准对比测试 (Baseline Comparison)**:
-为了验证力矩控制相对于位置控制的优势，可运行以下基于位置控制的模型进行对标：
+为了验证力矩控制相对于位置控制的优势，可运行以下基于位置控制的模型（3月之前版本）进行对标：
 ```bash
-# 高保真部署验证 (Mujoco Sim2Sim - 位置版 Baseline)
+# 3. 高保真部署验证 (Mujoco Sim2Sim - 位置版 Baseline)
 python deploy_mujoco/sim2sim_GO2_jump_position_final.py --load_model logs/go2_jump/exported/policies/policy_1.pt --load_mass 5.0 --terrain
 ```
 
