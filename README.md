@@ -155,8 +155,15 @@ python3 deploy_mujoco/sim2sim_GO2_jump_position.py --load_model logs/go2_jump_po
 # 实时预览 (Isaac Gym)
 python legged_gym/scripts/play.py --task go2_jump --load_run Mar05_07-28-45_ --checkpoint 3500
 
-# 高保真部署验证 (Mujoco Sim2Sim)
+# 高保真部署验证 (Mujoco Sim2Sim - 力矩版本项目)
 python deploy_mujoco/sim2sim_GO2_jump_torque_final.py --load_model logs/go2_jump_torque/exported/policies/policy_1.pt --load_mass 5.0 --terrain
+```
+
+**基准对比测试 (Baseline Comparison)**:
+为了验证力矩控制相对于位置控制的优势，可运行以下基于位置控制的模型进行对标：
+```bash
+# 高保真部署验证 (Mujoco Sim2Sim - 位置版 Baseline)
+python deploy_mujoco/sim2sim_GO2_jump_position_final.py --load_model logs/go2_jump/exported/policies/policy_1.pt --load_mass 5.0 --terrain
 ```
 
 ### 5.3 核心技术突破 (Key Technical Milestones)
