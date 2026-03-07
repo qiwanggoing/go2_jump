@@ -158,6 +158,23 @@ def run_mujoco(policy, cfg, args):
                 action = np.clip(action, -100., 100.)
                 viewer.sync()
 
+            # 如果用户指定，则通过将action清零来“废掉”一条腿
+            if args.disable_leg:
+                leg_joint_indices = {
+                    'FL': [0, 1, 2],    # 左前腿
+                    'FR': [3, 4, 5],    # 右前腿
+                    'RL': [6, 7, 8],    # 左后腿
+                    'RR': [9, 10, 11]   # 右后腿
+                }
+                if args.disable_leg in leg_joint_indices:
+                    indices_to_disable = leg_joint_indices[args.disable_leg]
+                    action[indices_to_disable] = 0.0  # 将这条腿的策略输出清零
+                    
+                    # 在启动时打印一次警告信息
+                    if 'leg_disabled_msg_sent' not in globals():
+                        print(f"\n\n{'!'*20} 警告 (位置模式): '{args.disable_leg}' 腿已被禁用 (策略输出被设为 0) {'!'*20}\n")
+                        globals()['leg_disabled_msg_sent'] = True
+
             # 200Hz PD 控制
             target_q_scaled = action * cfg.control.action_scale
             tau = pd_control(target_q_scaled, q, cfg.robot_config.kps, dq, cfg.robot_config.kds, cfg.robot_config.default_dof_pos)
@@ -185,6 +202,7 @@ if __name__ == '__main__':
     parser.add_argument('--load_model', type=str, required=True)
     parser.add_argument('--terrain', action='store_true')
     parser.add_argument('--load_mass', type=float, default=0.0)
+    parser.add_argument('--disable_leg', type=str, default=None, help='Disable a leg by setting its output actions to 0. Options: FL, FR, RL, RR')
     args = parser.parse_args()
 
     class Sim2simCfg(GO2_JUMP_Position_Cfg):

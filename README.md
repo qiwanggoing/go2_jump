@@ -153,21 +153,30 @@ python3 deploy_mujoco/sim2sim_GO2_jump_position.py --load_model logs/go2_jump_po
 - **Mujoco (Sim2Sim Final)**: 稳定跟踪 **2.5 m/s** (高保真物理对齐版)。
 - **鲁棒性验证**: 成功通过了 **5.0 kg - 8.0 kg (超载 70%+)** 额外负载及**崎岖地形 (--terrain)** 的压力测试。
 
+**鲁棒性压力测试 (Robustness Stress Test)**:
+为了对两种控制策略进行公平、统一的鲁棒性对比，两个部署脚本 (`sim2sim_GO2_jump_torque_final.py` 和 `sim2sim_GO2_jump_position_final.py`) 现在都支持相同的压力测试参数。
+
+- `--load_mass <float>`: 增加机身负载 (kg)。
+- `--terrain`: 启用崎岖地形模式。
+- `--disable_leg <leg_name>`: 禁用某条腿 (可选值: `FL`, `FR`, `RL`, `RR`)，模拟单腿失效。
+
 **快速启动命令 (Quick Start Guide)**:
 ```bash
 # 1. 实时预览 (Isaac Gym) - 加载 3月5日 3500代模型
 python legged_gym/scripts/play.py --task go2_jump --load_run Mar05_07-28-45_ --checkpoint 3500
 
-# 2. 高保真部署验证 (Mujoco Sim2Sim - 力矩版本项目)
+# 2. 鲁棒性压力测试 (Mujoco Sim2Sim - 力矩版本)
+# 说明：加载5kg负载，在崎岖地形上测试，并禁用右前腿(FR)
 # 注意：加载 exported 下的 policy_1.pt (由上述 play 命令导出)
-python deploy_mujoco/sim2sim_GO2_jump_torque_final.py --load_model logs/go2_jump_torque/exported/policies/policy_1.pt --load_mass 5.0 --terrain
+python deploy_mujoco/sim2sim_GO2_jump_torque_final.py --load_model logs/go2_jump_torque/exported/policies/policy_1.pt --load_mass 5.0 --terrain --disable_leg FR
 ```
 
 **基准对比测试 (Baseline Comparison)**:
-为了验证力矩控制相对于位置控制的优势，可运行以下基于位置控制的模型（3月之前版本）进行对标：
+为了验证力矩控制相对于位置控制的优势，可运行以下基于位置控制的模型进行对标，使用完全相同的压力测试参数。
 ```bash
-# 3. 高保真部署验证 (Mujoco Sim2Sim - 位置版 Baseline)
-python deploy_mujoco/sim2sim_GO2_jump_position_final.py --load_model logs/go2_jump/exported/policies/policy_1.pt --load_mass 5.0 --terrain
+# 3. 鲁棒性压力测试 (Mujoco Sim2Sim - 位置版 Baseline)
+# 说明：同样加载5kg负载，在崎岖地形上测试，并禁用右前腿(FR)
+python deploy_mujoco/sim2sim_GO2_jump_position_final.py --load_model logs/go2_jump/exported/policies/policy_1.pt --load_mass 5.0 --terrain --disable_leg FR
 ```
 
 ### 5.3 核心技术突破 (Key Technical Milestones)
