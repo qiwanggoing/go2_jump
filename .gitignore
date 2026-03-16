@@ -15,11 +15,16 @@ __pycache__/
 .venv/
 # env/
 venv/
-build/
-dist/
+build/dist/
 *.egg-info/
 
 # System
 .DS_Store
 .idea/
+.vscode/
+
+# Markdown files
+*.md
+!README.md
+
 .vscode/
