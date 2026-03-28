@@ -3,6 +3,7 @@ import os
 import numpy as np
 import isaacgym
 import torch
+from legged_gym import LEGGED_GYM_ROOT_DIR
 from legged_gym.envs import *
 from legged_gym.utils import get_args, export_policy_as_jit, task_registry, Logger
 
@@ -48,7 +49,7 @@ def play(args):
     
     # export policy
     if EXPORT_POLICY:
-        path = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), 'logs', train_cfg.runner.experiment_name, 'exported', 'policies')
+        path = os.path.join(LEGGED_GYM_ROOT_DIR, 'logs', train_cfg.runner.experiment_name, 'exported', 'policies')
         export_policy_as_jit(ppo_runner.alg.actor_critic, path)
         print('Exported policy as jit script to: ', path)
     

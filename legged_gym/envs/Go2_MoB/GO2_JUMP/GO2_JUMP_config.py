@@ -82,8 +82,8 @@ class GO2_JUMP_Cfg_Yu( LeggedRobotCfg ):
         damping = {'joint': 0.5}     # [N*m*s/rad]
         # Torque control
         action_scale = 10.0 #torque
-        # decimation: Number of control action updates @ sim DT per policy DT
-        decimation = 4
+        # Query the torque policy every simulator step: 0.005 s -> 200 Hz.
+        decimation = 1
     class asset:
         file = '{LEGGED_GYM_ROOT_DIR}/resources/robots/go2/urdf/go2_torque.urdf'
         name = "go2"
@@ -174,7 +174,7 @@ class GO2_JUMP_Cfg_Yu( LeggedRobotCfg ):
         soft_torque_limit = 1.
         base_height_target = 0.3#0.25
         max_contact_force = 100. # forces above this value are penalized
-        cycle_time=1.0
+        cycle_time=1.5
         target_feet_height=0.05
     class normalization:
         class obs_scales:
@@ -245,7 +245,7 @@ class GO2_JUMP_PPO_Yu(LeggedRobotCfgPPO):
         clip_param = 0.2
         entropy_coef = 0.01
         num_learning_epochs = 5
-        num_mini_batches = 4 # mini batch size = num_envs*nsteps / nminibatches
+        num_mini_batches = 16 # mini batch size = num_envs*nsteps / nminibatches
         learning_rate = 1.e-4 #5.e-4
         schedule = 'adaptive' # could be adaptive, fixed
         gamma = 0.99
@@ -266,7 +266,9 @@ class GO2_JUMP_PPO_Yu(LeggedRobotCfgPPO):
     class runner:
         policy_class_name = 'ActorCritic'
         algorithm_class_name = 'PPO'
-        num_steps_per_env = 24 # per iteration
+        # Keep roughly the same wall-clock rollout horizon per PPO iteration after
+        # increasing the policy rate from 50 Hz to 200 Hz.
+        num_steps_per_env = 96 # per iteration
         max_iterations = 15000 # number of policy updates
 
         # logging

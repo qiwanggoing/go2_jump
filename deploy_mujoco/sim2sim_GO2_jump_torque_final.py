@@ -1,5 +1,6 @@
 from legged_gym.envs.Go2_MoB.GO2_JUMP.GO2_JUMP_config import GO2_JUMP_Cfg_Yu
 import math
+import os
 import numpy as np
 import mujoco
 import mujoco.viewer
@@ -79,6 +80,20 @@ def get_joint_mapping(model):
 def torque_control(residual_torque, q, target_q, kp, dq, kd):
     '''Isaac Gym 风格的力矩计算'''
     return kp * (target_q - q) - kd * dq + residual_torque
+
+def resolve_model_path(load_model):
+    resolved = os.path.abspath(load_model)
+    alt_path = None
+    if load_model.startswith("logs/") or load_model.startswith("./logs/"):
+        rel_path = load_model[2:] if load_model.startswith("./") else load_model
+        alt_path = os.path.abspath(os.path.join("legged_gym", rel_path))
+
+    if alt_path and os.path.exists(resolved) and os.path.exists(alt_path):
+        if os.path.getmtime(alt_path) > os.path.getmtime(resolved):
+            print(f"[Load Warning] A newer exported policy exists at: {alt_path}")
+            print(f"[Load Warning] Current --load_model points to: {resolved}")
+    print(f"[Load] Using policy: {resolved}")
+    return resolved
 
 def run_mujoco(policy, cfg, args):
     global x_vel_cmd, y_vel_cmd, yaw_vel_cmd
@@ -246,5 +261,5 @@ if __name__ == '__main__':
             tau_limit = np.array([23.7, 23.7, 35.55] * 4)
             default_dof_pos = np.array([0.1, 0.8, -1.5, -0.1, 0.8, -1.5, 0.1, 1.0, -1.5, -0.1, 1.0, -1.5])
 
-    policy = torch.jit.load(args.load_model)
+    policy = torch.jit.load(resolve_model_path(args.load_model))
     run_mujoco(policy, Sim2simCfg(), args)

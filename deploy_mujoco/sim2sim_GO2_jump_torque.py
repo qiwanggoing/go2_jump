@@ -145,7 +145,7 @@ def run_mujoco(policy, cfg):
             y_vel_cmd = y_vel_cmd * (1 - alpha) + target_vy * current_speed_target * alpha
             yaw_vel_cmd = yaw_vel_cmd * (1 - alpha) + target_vyaw * current_speed_target * alpha
             
-            # 2. 策略推理 (50Hz)
+            # 2. 策略推理 (200 Hz when decimation == 1)
             if count_lowlevel % cfg.sim_config.decimation == 0:
                 obs = np.zeros([1, cfg.env.num_single_obs], dtype=np.float32)
                 phase = 2 * math.pi * count_lowlevel * cfg.sim_config.dt / cfg.rewards.cycle_time
@@ -175,10 +175,10 @@ def run_mujoco(policy, cfg):
                 action[:] = policy(torch.tensor(policy_input))[0].detach().numpy()
                 action = np.clip(action, -cfg.normalization.clip_actions, cfg.normalization.clip_actions)
                 
-                # 仅在 50Hz 同步渲染，减少抖动
+                # Keep rendering tied to the policy update path.
                 viewer.sync()
 
-            # 3. 计算并施加力矩 (200Hz)
+            # 3. 计算并施加力矩 (200 Hz)
             # 还原为瞬时动作，移除延迟缓冲区
             tau = torque_control(action * current_action_scale, q, cfg.robot_config.default_dof_pos, 
                                  cfg.robot_config.kps * pd_factor, dq, cfg.robot_config.kds * pd_factor)
@@ -206,7 +206,7 @@ if __name__ == '__main__':
     class Sim2simCfg(GO2_JUMP_Cfg_Yu):
         class sim_config:
             mujoco_model_path = f'{LEGGED_GYM_ROOT_DIR}/resources/robots/go2/go2/scene{"_terrain" if args.terrain else ""}.xml'
-            dt, decimation = 0.005, 4
+            dt, decimation = 0.005, 1
         class robot_config:
             kps, kds = np.full(12, 20.0), np.full(12, 0.5)
             tau_limit = np.array([23.7, 23.7, 35.55] * 4)

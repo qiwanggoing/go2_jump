@@ -505,11 +505,13 @@ class GO2_JUMP_Robot(BaseTask):
         """
         # ================================================================
         # 1. 计算课程进度 (Curriculum Progress)
-        # 阶段一: 前 500 iters (12000 steps) -> Progress = 0 (PD全开, Scale=10)
-        # 阶段二: 接下来的 1500 iters (36000 steps) -> Progress 0->1 线性增加
+        # After moving the policy from 50 Hz to 200 Hz, keep the curriculum
+        # duration aligned in real time by scaling the step milestones by 4.
+        # 阶段一: 前 500 iters (48000 steps) -> Progress = 0 (PD全开, Scale=10)
+        # 阶段二: 接下来的 1500 iters (144000 steps) -> Progress 0->1 线性增加
         # 阶段三: 之后 -> Progress = 1 (PD=0, Scale=23.5)
-        warmup_steps = 12000.0 # 500 iters * 24 steps
-        ramp_steps = 36000.0   # 1500 iters * 24 steps
+        warmup_steps = 48000.0 # 500 iters * 96 steps
+        ramp_steps = 144000.0   # 1500 iters * 96 steps
         
         if self.common_step_counter < warmup_steps:
             progress = 0.0
