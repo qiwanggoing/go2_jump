@@ -2,6 +2,14 @@
 
 本文档记录了将 `go2_jump` 任务从一个**模拟 PD 位置控制（Position Control）策略**迁移到一个**残差力矩控制（Residual Torque Control）**策略所做的核心代码修改。
 
+## 仿真视频
+
+以下演示均来自 MuJoCo 仿真。点击动图可打开完整视频。
+
+| 直线跳跃 | 负载测试 | 不平地形 |
+|---|---|---|
+| [![直线跳跃预览](media/straight_jump_preview.gif)](media/straight_jump.mp4) | [![负载测试预览](media/payload_jump_preview.gif)](media/payload_jump.mp4) | [![不平地形预览](media/terrain_jump_preview.gif)](media/terrain_jump.mp4) |
+
 ## 1. 核心概念转变
 
 ### 原 PD 位置控制 (Before)
